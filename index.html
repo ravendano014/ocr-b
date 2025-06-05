@@ -3,17 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lector de Documentos de Identidad</title>
+    <title>Extractor de Datos de Documentos de Identidad</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf417@1.0.0/dist/pdf417.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
             max-width: 900px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
+            line-height: 1.6;
         }
         h1 {
-            color: #333;
+            color: #2c3e50;
             text-align: center;
         }
         .container {
@@ -21,502 +24,382 @@
             flex-direction: column;
             gap: 20px;
         }
-        .camera-section {
-            background-color: white;
+        .upload-section {
+            border: 2px dashed #3498db;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            border-radius: 5px;
+            background-color: #f8f9fa;
         }
-        .results-section {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        .preview-section {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
         }
-        #camera {
-            width: 100%;
-            height: auto;
-            background-color: #eee;
+        .image-preview {
+            flex: 1;
+            min-width: 300px;
+        }
+        .image-preview img {
+            max-width: 100%;
+            border: 1px solid #ddd;
             border-radius: 4px;
         }
-        #canvas {
-            display: none;
+        .results {
+            flex: 1;
+            min-width: 300px;
+        }
+        .result-section {
+            margin-top: 20px;
+        }
+        .result-box {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            margin-top: 10px;
         }
         button {
-            background-color: #4CAF50;
+            background-color: #3498db;
             color: white;
             border: none;
             padding: 10px 15px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
-            margin-top: 10px;
         }
         button:hover {
-            background-color: #45a049;
+            background-color: #2980b9;
         }
-        .selectors {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+            border-radius: 5px 5px 0 0;
         }
-        select {
-            padding: 8px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 10px 16px;
+            transition: 0.3s;
+            color: #333;
         }
-        .data-field {
-            margin-bottom: 10px;
-            padding: 10px;
-            background-color: #f9f9f9;
-            border-radius: 4px;
+        .tab button:hover {
+            background-color: #ddd;
         }
-        .data-field strong {
+        .tab button.active {
+            background-color: #3498db;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 5px 5px;
+        }
+        .loading {
             display: inline-block;
-            width: 150px;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,.3);
+            border-radius: 50%;
+            border-top-color: #3498db;
+            animation: spin 1s ease-in-out infinite;
         }
-        .error {
-            color: red;
-            margin-top: 10px;
-        }
-        .success {
-            color: green;
-            margin-top: 10px;
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
-    <h1>Lector de Documentos de Identidad</h1>
+    <h1>Extractor de Datos de Documentos de Identidad</h1>
     
     <div class="container">
-        <div class="camera-section">
-            <div class="selectors">
-                <select id="cameraSelect"></select>
-                <button id="startButton">Iniciar Cámara</button>
-                <button id="captureButton" disabled>Capturar Documento</button>
+        <div class="upload-section">
+            <h2>Sube una imagen de tu documento</h2>
+            <input type="file" id="fileInput" accept="image/*" capture="camera">
+            <p>o arrastra y suelta una imagen aquí</p>
+            <div id="loadingIndicator" style="display: none;">
+                <span class="loading"></span> Procesando imagen...
             </div>
-            <video id="camera" autoplay playsinline></video>
-            <canvas id="canvas"></canvas>
-            <div id="cameraStatus" class="error">Cámara no iniciada</div>
         </div>
         
-        <div class="results-section">
-            <h2>Datos Extraídos</h2>
-            <div class="data-field">
-                <strong>Tipo de Documento:</strong> <span id="docType">-</span>
+        <div class="preview-section">
+            <div class="image-preview">
+                <h3>Vista previa</h3>
+                <img id="imagePreview" src="" alt="Vista previa de la imagen" style="display: none;">
             </div>
-            <div class="data-field">
-                <strong>Número:</strong> <span id="docNumber">-</span>
+            
+            <div class="results">
+                <div class="tab">
+                    <button class="tablinks active" onclick="openTab(event, 'ocrResults')">OCR Texto</button>
+                    <button class="tablinks" onclick="openTab(event, 'mrzResults')">MRZ</button>
+                    <button class="tablinks" onclick="openTab(event, 'pdf417Results')">PDF417</button>
+                </div>
+                
+                <div id="ocrResults" class="tabcontent" style="display: block;">
+                    <h3>Texto reconocido (OCR)</h3>
+                    <div class="result-box" id="ocrTextResult">
+                        <p>Los resultados del OCR aparecerán aquí...</p>
+                    </div>
+                </div>
+                
+                <div id="mrzResults" class="tabcontent">
+                    <h3>Zona de Lectura Mecánica (MRZ)</h3>
+                    <div class="result-box" id="mrzTextResult">
+                        <p>Los resultados del MRZ aparecerán aquí...</p>
+                    </div>
+                </div>
+                
+                <div id="pdf417Results" class="tabcontent">
+                    <h3>Código PDF417</h3>
+                    <div class="result-box" id="pdf417TextResult">
+                        <p>Los datos del código PDF417 aparecerán aquí...</p>
+                    </div>
+                </div>
             </div>
-            <div class="data-field">
-                <strong>Apellidos:</strong> <span id="lastName">-</span>
-            </div>
-            <div class="data-field">
-                <strong>Nombres:</strong> <span id="firstName">-</span>
-            </div>
-            <div class="data-field">
-                <strong>Nacionalidad:</strong> <span id="nationality">-</span>
-            </div>
-            <div class="data-field">
-                <strong>Fecha de Nacimiento:</strong> <span id="birthDate">-</span>
-            </div>
-            <div class="data-field">
-                <strong>Sexo:</strong> <span id="gender">-</span>
-            </div>
-            <div class="data-field">
-                <strong>Fecha de Expedición:</strong> <span id="issueDate">-</span>
-            </div>
-            <div class="data-field">
-                <strong>Fecha de Vencimiento:</strong> <span id="expiryDate">-</span>
-            </div>
-            <div id="resultStatus"></div>
         </div>
     </div>
 
-    <!-- Bibliotecas para procesamiento de imágenes y OCR -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pdf417@0.8.0/dist/pdf417.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-
     <script>
         // Variables globales
-        let stream = null;
-        let selectedDeviceId = null;
-        const video = document.getElementById('camera');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const cameraSelect = document.getElementById('cameraSelect');
-        const startButton = document.getElementById('startButton');
-        const captureButton = document.getElementById('captureButton');
-        const cameraStatus = document.getElementById('cameraStatus');
-        const resultStatus = document.getElementById('resultStatus');
-
-        // Evento al cargar la página
-        window.addEventListener('DOMContentLoaded', () => {
-            enumerateCameras();
-        });
-
-        // Enumerar cámaras disponibles
-        async function enumerateCameras() {
-            try {
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const videoDevices = devices.filter(device => device.kind === 'videoinput');
-                
-                if (videoDevices.length === 0) {
-                    cameraStatus.textContent = "No se encontraron cámaras";
-                    return;
-                }
-                
-                videoDevices.forEach((device, index) => {
-                    const option = document.createElement('option');
-                    option.value = device.deviceId;
-                    option.text = device.label || `Cámara ${index + 1}`;
-                    cameraSelect.appendChild(option);
-                });
-                
-                selectedDeviceId = videoDevices[0].deviceId;
-            } catch (err) {
-                cameraStatus.textContent = `Error al acceder a las cámaras: ${err.message}`;
-                cameraStatus.className = 'error';
+        let imageData = null;
+        
+        // Configurar el evento de subida de archivo
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                loadImage(file);
             }
-        }
-
-        // Cambiar cámara seleccionada
-        cameraSelect.addEventListener('change', () => {
-            selectedDeviceId = cameraSelect.value;
         });
-
-        // Iniciar cámara
-        startButton.addEventListener('click', async () => {
-            try {
-                if (stream) {
-                    stream.getTracks().forEach(track => track.stop());
-                }
+        
+        // Configurar el drag and drop
+        const uploadSection = document.querySelector('.upload-section');
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.style.backgroundColor = '#e9f7fe';
+        });
+        
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.style.backgroundColor = '#f8f9fa';
+        });
+        
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.style.backgroundColor = '#f8f9fa';
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.match('image.*')) {
+                loadImage(file);
+            }
+        });
+        
+        // Función para cargar la imagen
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.getElementById('imagePreview');
+                img.src = e.target.result;
+                img.style.display = 'block';
                 
-                const constraints = {
-                    video: {
-                        deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
-                        facingMode: 'environment'
-                    }
+                // Mostrar indicador de carga
+                document.getElementById('loadingIndicator').style.display = 'block';
+                
+                // Procesar la imagen
+                processImage(e.target.result);
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        // Función para procesar la imagen
+        async function processImage(imageSrc) {
+            try {
+                // Crear una imagen para trabajar con ella
+                const img = new Image();
+                img.src = imageSrc;
+                
+                img.onload = async function() {
+                    // Crear un canvas para manipular la imagen
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Guardar los datos de la imagen
+                    imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    
+                    // Procesar OCR general
+                    await processOCR(canvas);
+                    
+                    // Procesar MRZ
+                    await processMRZ(canvas);
+                    
+                    // Procesar PDF417
+                    await processPDF417(imageData);
+                    
+                    // Ocultar indicador de carga
+                    document.getElementById('loadingIndicator').style.display = 'none';
                 };
-                
-                stream = await navigator.mediaDevices.getUserMedia(constraints);
-                video.srcObject = stream;
-                captureButton.disabled = false;
-                cameraStatus.textContent = "Cámara iniciada correctamente";
-                cameraStatus.className = 'success';
-            } catch (err) {
-                cameraStatus.textContent = `Error al iniciar la cámara: ${err.message}`;
-                cameraStatus.className = 'error';
-            }
-        });
-
-        // Capturar imagen y procesar
-        captureButton.addEventListener('click', async () => {
-            if (!stream) return;
-            
-            // Ajustar canvas al tamaño del video
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            resultStatus.textContent = "Procesando documento...";
-            resultStatus.className = '';
-            
-            try {
-                // Extraer datos del documento
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                
-                // 1. Intentar leer código PDF417 (IDE302)
-                const pdf417Result = await scanPDF417(imageData);
-                if (pdf417Result) {
-                    displayPDF417Data(pdf417Result);
-                    resultStatus.textContent = "Datos extraídos correctamente (PDF417)";
-                    resultStatus.className = 'success';
-                    return;
-                }
-                
-                // 2. Intentar leer MRZ (Zona legible por máquina)
-                const mrzResult = await scanMRZ(imageData);
-                if (mrzResult) {
-                    displayMRZData(mrzResult);
-                    resultStatus.textContent = "Datos extraídos correctamente (MRZ)";
-                    resultStatus.className = 'success';
-                    return;
-                }
-                
-                // 3. Intentar OCR en áreas específicas (OCR-B)
-                const ocrResult = await performOCR(imageData);
-                if (ocrResult) {
-                    displayOCRData(ocrResult);
-                    resultStatus.textContent = "Datos extraídos correctamente (OCR)";
-                    resultStatus.className = 'success';
-                    return;
-                }
-                
-                resultStatus.textContent = "No se pudo leer ningún dato del documento";
-                resultStatus.className = 'error';
-            } catch (err) {
-                resultStatus.textContent = `Error al procesar documento: ${err.message}`;
-                resultStatus.className = 'error';
-                console.error(err);
-            }
-        });
-
-        // Función para escanear código PDF417
-        async function scanPDF417(imageData) {
-            try {
-                // Usamos jsQR que también puede leer algunos códigos PDF417
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
-                if (!code) return null;
-                
-                // Parsear datos específicos de IDE302
-                if (code.data.startsWith("@")) {
-                    return parseIDE302(code.data);
-                }
-                
-                return null;
-            } catch (err) {
-                console.error("Error al leer PDF417:", err);
-                return null;
+            } catch (error) {
+                console.error("Error al procesar la imagen:", error);
+                document.getElementById('loadingIndicator').style.display = 'none';
             }
         }
-
-        // Parsear formato IDE302 (PDF417)
-        function parseIDE302(data) {
-            const lines = data.split('\n');
-            if (lines.length < 3) return null;
-            
-            // Ejemplo de estructura IDE302:
-            // @
-            // ANI<<ALVARO<<<<<<<<<<<<<<<<<<<<<<<<<<<
-            // 12345678A5ESP7601011M1801015<<<<<<<<2
-            
-            const result = {};
-            
-            // Línea 2: Apellidos y nombres
-            const nameLine = lines[1];
-            const nameParts = nameLine.split('<<');
-            result.lastName = nameParts[0].substring(5); // Quitar los primeros 5 caracteres (ej. "ANI<<")
-            result.firstName = nameParts[1].replace(/</g, '').trim();
-            
-            // Línea 3: Datos personales
-            const dataLine = lines[2];
-            result.docNumber = dataLine.substring(0, 9).replace(/</g, '');
-            result.nationality = dataLine.substring(10, 13);
-            
-            // Fecha de nacimiento (YYMMDD)
-            const birthDateStr = dataLine.substring(13, 19);
-            result.birthDate = `19${birthDateStr.substring(0, 2)}-${birthDateStr.substring(2, 4)}-${birthDateStr.substring(4, 6)}`;
-            
-            result.gender = dataLine.substring(20, 21);
-            
-            // Fecha de vencimiento (YYMMDD)
-            const expiryDateStr = dataLine.substring(21, 27);
-            result.expiryDate = `20${expiryDateStr.substring(0, 2)}-${expiryDateStr.substring(2, 4)}-${expiryDateStr.substring(4, 6)}`;
-            
-            result.docType = "Documento Nacional de Identidad";
-            
-            return result;
-        }
-
-        // Función para escanear MRZ
-        async function scanMRZ(imageData) {
+        
+        // Función para procesar OCR general
+        async function processOCR(canvas) {
             try {
-                // Usar Tesseract.js para OCR en la zona MRZ
-                const { data: { text } } = await Tesseract.recognize(
-                    imageData,
-                    'eng',
-                    { 
-                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', 
-                        preserve_interword_spaces: true 
+                const result = await Tesseract.recognize(
+                    canvas,
+                    'spa+eng',
+                    {
+                        logger: m => console.log(m),
+                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789< '
                     }
                 );
                 
-                if (!text) return null;
-                
-                // Buscar líneas MRZ (generalmente 2 o 3 líneas con caracteres especiales)
-                const lines = text.split('\n')
-                    .map(line => line.trim())
-                    .filter(line => line.length > 20 && (line.includes('<') || /[0-9]/.test(line)));
-                
-                if (lines.length < 2) return null;
-                
-                return parseMRZ(lines);
-            } catch (err) {
-                console.error("Error al leer MRZ:", err);
-                return null;
+                document.getElementById('ocrTextResult').innerHTML = `
+                    <p><strong>Texto reconocido:</strong></p>
+                    <pre>${result.data.text}</pre>
+                    <p><strong>Confianza media:</strong> ${result.data.confidence.toFixed(2)}%</p>
+                `;
+            } catch (error) {
+                console.error("Error en OCR:", error);
+                document.getElementById('ocrTextResult').innerHTML = `
+                    <p>Error al procesar el OCR: ${error.message}</p>
+                `;
             }
         }
-
-        // Parsear MRZ (para pasaportes y documentos de identidad)
-        function parseMRZ(lines) {
-            const result = {};
-            
-            // Determinar tipo de documento por la primera línea
-            if (lines[0].startsWith('P<')) {
-                result.docType = "Pasaporte";
-                return parsePassportMRZ(lines, result);
-            } else {
-                result.docType = "Documento de Identidad";
-                return parseIDCardMRZ(lines, result);
-            }
-        }
-
-        // Parsear MRZ de pasaporte
-        function parsePassportMRZ(lines, result) {
-            // Primera línea
-            const line1 = lines[0];
-            const country = line1.substring(2, 5);
-            
-            // Segunda línea
-            const line2 = lines[1];
-            result.docNumber = line2.substring(0, 9).replace(/</g, '');
-            result.nationality = country;
-            
-            // Fecha de nacimiento (YYMMDD)
-            const birthDateStr = line2.substring(13, 19);
-            result.birthDate = `19${birthDateStr.substring(0, 2)}-${birthDateStr.substring(2, 4)}-${birthDateStr.substring(4, 6)}`;
-            
-            result.gender = line2.substring(20, 21);
-            
-            // Fecha de vencimiento (YYMMDD)
-            const expiryDateStr = line2.substring(21, 27);
-            result.expiryDate = `20${expiryDateStr.substring(0, 2)}-${expiryDateStr.substring(2, 4)}-${expiryDateStr.substring(4, 6)}`;
-            
-            // Nombre (puede estar en la primera línea)
-            const nameParts = line1.split('<<');
-            result.lastName = nameParts[0].substring(5).replace(/</g, '');
-            result.firstName = nameParts[1] ? nameParts[1].replace(/</g, ' ') : '';
-            
-            return result;
-        }
-
-        // Parsear MRZ de documento de identidad
-        function parseIDCardMRZ(lines, result) {
-            // Suponemos formato de 2 líneas
-            const line1 = lines[0];
-            const line2 = lines[1];
-            
-            result.docNumber = line1.substring(0, 9).replace(/</g, '');
-            
-            // Fecha de nacimiento (YYMMDD)
-            const birthDateStr = line1.substring(13, 19);
-            result.birthDate = `19${birthDateStr.substring(0, 2)}-${birthDateStr.substring(2, 4)}-${birthDateStr.substring(4, 6)}`;
-            
-            result.gender = line1.substring(20, 21);
-            
-            // Fecha de vencimiento (YYMMDD)
-            const expiryDateStr = line1.substring(21, 27);
-            result.expiryDate = `20${expiryDateStr.substring(0, 2)}-${expiryDateStr.substring(2, 4)}-${expiryDateStr.substring(4, 6)}`;
-            
-            // Nacionalidad
-            result.nationality = line1.substring(10, 13);
-            
-            // Nombre
-            const nameParts = line2.split('<<');
-            result.lastName = nameParts[0].replace(/</g, ' ');
-            result.firstName = nameParts[1] ? nameParts[1].replace(/</g, ' ') : '';
-            
-            return result;
-        }
-
-        // Función para realizar OCR en áreas específicas (OCR-B)
-        async function performOCR(imageData) {
+        
+        // Función para procesar MRZ
+        async function processMRZ(canvas) {
             try {
-                // Recortar áreas específicas para OCR (ajustar según necesidades)
-                const areas = {
-                    docNumber: { x: 0.2, y: 0.1, width: 0.3, height: 0.05 },
-                    lastName: { x: 0.2, y: 0.2, width: 0.6, height: 0.05 },
-                    firstName: { x: 0.2, y: 0.25, width: 0.6, height: 0.05 },
-                    birthDate: { x: 0.2, y: 0.35, width: 0.2, height: 0.05 },
-                    expiryDate: { x: 0.5, y: 0.35, width: 0.2, height: 0.05 }
-                };
+                // Primero intentamos encontrar el MRZ en la parte inferior de la imagen
+                const mrzHeight = 100; // Altura típica del área MRZ
+                const mrzCanvas = document.createElement('canvas');
+                const mrzCtx = mrzCanvas.getContext('2d');
+                mrzCanvas.width = canvas.width;
+                mrzCanvas.height = mrzHeight;
                 
-                const result = { docType: "Documento de Identidad" };
+                // Copiar la parte inferior de la imagen
+                mrzCtx.drawImage(
+                    canvas,
+                    0, canvas.height - mrzHeight, // Coordenadas de origen
+                    canvas.width, mrzHeight,      // Dimensiones de origen
+                    0, 0,                        // Coordenadas de destino
+                    canvas.width, mrzHeight       // Dimensiones de destino
+                );
                 
-                // Procesar cada área
-                for (const [field, area] of Object.entries(areas)) {
-                    const { x, y, width, height } = area;
-                    const cropped = cropImageData(imageData, x, y, width, height);
+                // Procesar OCR específico para MRZ
+                const result = await Tesseract.recognize(
+                    mrzCanvas,
+                    'mrz',
+                    {
+                        logger: m => console.log(m),
+                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789< '
+                    }
+                );
+                
+                // Parsear el MRZ (esto es básico, se puede mejorar)
+                const mrzText = result.data.text;
+                const mrzLines = mrzText.split('\n').filter(line => line.trim().length > 0);
+                
+                let mrzHtml = `<p><strong>MRZ reconocido:</strong></p><pre>${mrzText}</pre>`;
+                
+                if (mrzLines.length >= 2) {
+                    mrzHtml += `<p><strong>Línea 1:</strong> ${mrzLines[0]}</p>`;
+                    mrzHtml += `<p><strong>Línea 2:</strong> ${mrzLines[1]}</p>`;
                     
-                    const { data: { text } } = await Tesseract.recognize(
-                        cropped,
-                        'spa',
-                        { 
-                            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/- ', 
-                            preserve_interword_spaces: true 
+                    if (mrzLines.length > 2) {
+                        mrzHtml += `<p><strong>Línea 3:</strong> ${mrzLines[2]}</p>`;
+                    }
+                    
+                    // Intento básico de extraer datos del MRZ (para pasaporte tipo TD1)
+                    if (mrzLines[0].startsWith('P') && mrzLines[0].length > 1) {
+                        const docType = mrzLines[0].substring(0, 2);
+                        const issuingCountry = mrzLines[0].substring(2, 5);
+                        const lastName = mrzLines[0].substring(5).split('<<')[0].replace(/</g, ' ');
+                        const firstName = mrzLines[0].split('<<')[1] ? mrzLines[0].split('<<')[1].replace(/</g, ' ') : '';
+                        
+                        mrzHtml += `<h4>Datos extraídos:</h4>`;
+                        mrzHtml += `<p><strong>Tipo de documento:</strong> ${docType}</p>`;
+                        mrzHtml += `<p><strong>País emisor:</strong> ${issuingCountry}</p>`;
+                        mrzHtml += `<p><strong>Apellido:</strong> ${lastName}</p>`;
+                        mrzHtml += `<p><strong>Nombre:</strong> ${firstName}</p>`;
+                    }
+                }
+                
+                document.getElementById('mrzTextResult').innerHTML = mrzHtml;
+            } catch (error) {
+                console.error("Error en MRZ:", error);
+                document.getElementById('mrzTextResult').innerHTML = `
+                    <p>Error al procesar el MRZ: ${error.message}</p>
+                    <p>Intenta recortar manualmente la zona MRZ (parte inferior del documento) y subir solo esa parte.</p>
+                `;
+            }
+        }
+        
+        // Función para procesar PDF417
+        async function processPDF417(imageData) {
+            try {
+                // Usar jsQR para detectar códigos (aunque está diseñado para QR, puede ayudar)
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                
+                if (code) {
+                    document.getElementById('pdf417TextResult').innerHTML = `
+                        <p><strong>Código detectado:</strong></p>
+                        <pre>${code.data}</pre>
+                        <p><strong>Tipo:</strong> ${code.type}</p>
+                    `;
+                } else {
+                    // Si no se detecta con jsQR, intentar con pdf417.js
+                    try {
+                        const decoded = pdf417.decode(imageData);
+                        if (decoded && decoded.length > 0) {
+                            let pdf417Html = `<p><strong>Datos PDF417:</strong></p>`;
+                            decoded.forEach((item, index) => {
+                                pdf417Html += `<p><strong>Bloque ${index + 1}:</strong> ${item}</p>`;
+                            });
+                            document.getElementById('pdf417TextResult').innerHTML = pdf417Html;
+                        } else {
+                            document.getElementById('pdf417TextResult').innerHTML = `
+                                <p>No se detectó ningún código PDF417.</p>
+                                <p>Intenta tomar una foto más clara del código de barras.</p>
+                            `;
                         }
-                    );
-                    
-                    result[field] = text.trim();
+                    } catch (e) {
+                        document.getElementById('pdf417TextResult').innerHTML = `
+                            <p>No se detectó ningún código PDF417.</p>
+                            <p>Error: ${e.message}</p>
+                        `;
+                    }
                 }
-                
-                return result;
-            } catch (err) {
-                console.error("Error en OCR:", err);
-                return null;
+            } catch (error) {
+                console.error("Error en PDF417:", error);
+                document.getElementById('pdf417TextResult').innerHTML = `
+                    <p>Error al procesar el código PDF417: ${error.message}</p>
+                `;
             }
         }
-
-        // Función para recortar ImageData
-        function cropImageData(imageData, x, y, width, height) {
-            const cropX = Math.floor(x * imageData.width);
-            const cropY = Math.floor(y * imageData.height);
-            const cropWidth = Math.floor(width * imageData.width);
-            const cropHeight = Math.floor(height * imageData.height);
-            
-            const croppedData = new Uint8ClampedArray(cropWidth * cropHeight * 4);
-            
-            for (let i = 0; i < cropHeight; i++) {
-                for (let j = 0; j < cropWidth; j++) {
-                    const srcPos = ((cropY + i) * imageData.width + (cropX + j)) * 4;
-                    const dstPos = (i * cropWidth + j) * 4;
-                    
-                    croppedData[dstPos] = imageData.data[srcPos];
-                    croppedData[dstPos + 1] = imageData.data[srcPos + 1];
-                    croppedData[dstPos + 2] = imageData.data[srcPos + 2];
-                    croppedData[dstPos + 3] = imageData.data[srcPos + 3];
-                }
+        
+        // Función para cambiar pestañas
+        function openTab(evt, tabName) {
+            const tabcontent = document.getElementsByClassName("tabcontent");
+            for (let i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
             }
             
-            return new ImageData(croppedData, cropWidth, cropHeight);
-        }
-
-        // Mostrar datos de PDF417
-        function displayPDF417Data(data) {
-            document.getElementById('docType').textContent = data.docType || '-';
-            document.getElementById('docNumber').textContent = data.docNumber || '-';
-            document.getElementById('lastName').textContent = data.lastName || '-';
-            document.getElementById('firstName').textContent = data.firstName || '-';
-            document.getElementById('nationality').textContent = data.nationality || '-';
-            document.getElementById('birthDate').textContent = data.birthDate || '-';
-            document.getElementById('gender').textContent = data.gender || '-';
-            document.getElementById('expiryDate').textContent = data.expiryDate || '-';
-        }
-
-        // Mostrar datos de MRZ
-        function displayMRZData(data) {
-            document.getElementById('docType').textContent = data.docType || '-';
-            document.getElementById('docNumber').textContent = data.docNumber || '-';
-            document.getElementById('lastName').textContent = data.lastName || '-';
-            document.getElementById('firstName').textContent = data.firstName || '-';
-            document.getElementById('nationality').textContent = data.nationality || '-';
-            document.getElementById('birthDate').textContent = data.birthDate || '-';
-            document.getElementById('gender').textContent = data.gender || '-';
-            document.getElementById('expiryDate').textContent = data.expiryDate || '-';
-        }
-
-        // Mostrar datos de OCR
-        function displayOCRData(data) {
-            document.getElementById('docType').textContent = data.docType || '-';
-            document.getElementById('docNumber').textContent = data.docNumber || '-';
-            document.getElementById('lastName').textContent = data.lastName || '-';
-            document.getElementById('firstName').textContent = data.firstName || '-';
-            document.getElementById('birthDate').textContent = data.birthDate || '-';
-            document.getElementById('expiryDate').textContent = data.expiryDate || '-';
+            const tablinks = document.getElementsByClassName("tablinks");
+            for (let i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
         }
     </script>
 </body>
