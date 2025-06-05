@@ -3,404 +3,211 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extractor de Datos de Documentos de Identidad</title>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pdf417@1.0.0/dist/pdf417.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <title>Lector de Códigos PDF417</title>
+    <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 900px;
+            max-width: 800px;
             margin: 0 auto;
             padding: 20px;
-            line-height: 1.6;
+            text-align: center;
         }
         h1 {
             color: #2c3e50;
-            text-align: center;
         }
-        .container {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
+        #scanner-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin: 20px auto;
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            overflow: hidden;
         }
-        .upload-section {
-            border: 2px dashed #3498db;
-            padding: 20px;
-            text-align: center;
-            border-radius: 5px;
-            background-color: #f8f9fa;
+        #video {
+            width: 100%;
+            display: block;
         }
-        .preview-section {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-        .image-preview {
-            flex: 1;
-            min-width: 300px;
-        }
-        .image-preview img {
-            max-width: 100%;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        .results {
-            flex: 1;
-            min-width: 300px;
-        }
-        .result-section {
-            margin-top: 20px;
-        }
-        .result-box {
-            border: 1px solid #ddd;
+        #result {
+            margin: 20px 0;
             padding: 15px;
+            border: 1px solid #ddd;
             border-radius: 5px;
             background-color: #f9f9f9;
-            margin-top: 10px;
+            min-height: 50px;
+            text-align: left;
+            white-space: pre-wrap;
         }
         button {
             background-color: #3498db;
             color: white;
             border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
+            padding: 10px 20px;
+            border-radius: 5px;
             cursor: pointer;
             font-size: 16px;
+            margin: 5px;
         }
         button:hover {
             background-color: #2980b9;
         }
-        .tab {
-            overflow: hidden;
-            border: 1px solid #ccc;
-            background-color: #f1f1f1;
-            border-radius: 5px 5px 0 0;
-        }
-        .tab button {
-            background-color: inherit;
-            float: left;
-            border: none;
-            outline: none;
-            cursor: pointer;
-            padding: 10px 16px;
-            transition: 0.3s;
-            color: #333;
-        }
-        .tab button:hover {
-            background-color: #ddd;
-        }
-        .tab button.active {
-            background-color: #3498db;
-            color: white;
-        }
-        .tabcontent {
+        .hidden {
             display: none;
-            padding: 15px;
-            border: 1px solid #ccc;
-            border-top: none;
-            border-radius: 0 0 5px 5px;
         }
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(0,0,0,.3);
-            border-radius: 50%;
-            border-top-color: #3498db;
-            animation: spin 1s ease-in-out infinite;
+        #formats {
+            margin: 10px 0;
         }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        #error {
+            color: #e74c3c;
+            margin: 10px 0;
         }
     </style>
 </head>
 <body>
-    <h1>Extractor de Datos de Documentos de Identidad</h1>
+    <h1>Lector de Códigos PDF417</h1>
+    <p>Escanea códigos de barras PDF417 con la cámara de tu dispositivo</p>
     
-    <div class="container">
-        <div class="upload-section">
-            <h2>Sube una imagen de tu documento</h2>
-            <input type="file" id="fileInput" accept="image/*" capture="camera">
-            <p>o arrastra y suelta una imagen aquí</p>
-            <div id="loadingIndicator" style="display: none;">
-                <span class="loading"></span> Procesando imagen...
-            </div>
-        </div>
-        
-        <div class="preview-section">
-            <div class="image-preview">
-                <h3>Vista previa</h3>
-                <img id="imagePreview" src="" alt="Vista previa de la imagen" style="display: none;">
-            </div>
-            
-            <div class="results">
-                <div class="tab">
-                    <button class="tablinks active" onclick="openTab(event, 'ocrResults')">OCR Texto</button>
-                    <button class="tablinks" onclick="openTab(event, 'mrzResults')">MRZ</button>
-                    <button class="tablinks" onclick="openTab(event, 'pdf417Results')">PDF417</button>
-                </div>
-                
-                <div id="ocrResults" class="tabcontent" style="display: block;">
-                    <h3>Texto reconocido (OCR)</h3>
-                    <div class="result-box" id="ocrTextResult">
-                        <p>Los resultados del OCR aparecerán aquí...</p>
-                    </div>
-                </div>
-                
-                <div id="mrzResults" class="tabcontent">
-                    <h3>Zona de Lectura Mecánica (MRZ)</h3>
-                    <div class="result-box" id="mrzTextResult">
-                        <p>Los resultados del MRZ aparecerán aquí...</p>
-                    </div>
-                </div>
-                
-                <div id="pdf417Results" class="tabcontent">
-                    <h3>Código PDF417</h3>
-                    <div class="result-box" id="pdf417TextResult">
-                        <p>Los datos del código PDF417 aparecerán aquí...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div id="scanner-container">
+        <video id="video"></video>
     </div>
-
+    
+    <div id="formats">
+        <label for="format-select">Formato: </label>
+        <select id="format-select">
+            <option value="PDF_417">PDF417</option>
+            <option value="QR_CODE">QR Code</option>
+            <option value="UPC_A">UPC-A</option>
+            <option value="EAN_13">EAN-13</option>
+            <option value="CODE_128">Code 128</option>
+            <option value="ALL">Todos los formatos</option>
+        </select>
+    </div>
+    
+    <button id="start-button">Iniciar Escaneo</button>
+    <button id="stop-button" class="hidden">Detener Escaneo</button>
+    <button id="copy-button" class="hidden">Copiar Datos</button>
+    
+    <div id="error"></div>
+    
+    <h3>Datos extraídos:</h3>
+    <div id="result">Esperando escaneo...</div>
+    
     <script>
-        // Variables globales
-        let imageData = null;
-        
-        // Configurar el evento de subida de archivo
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                loadImage(file);
-            }
-        });
-        
-        // Configurar el drag and drop
-        const uploadSection = document.querySelector('.upload-section');
-        uploadSection.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadSection.style.backgroundColor = '#e9f7fe';
-        });
-        
-        uploadSection.addEventListener('dragleave', () => {
-            uploadSection.style.backgroundColor = '#f8f9fa';
-        });
-        
-        uploadSection.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadSection.style.backgroundColor = '#f8f9fa';
-            const file = e.dataTransfer.files[0];
-            if (file && file.type.match('image.*')) {
-                loadImage(file);
-            }
-        });
-        
-        // Función para cargar la imagen
-        function loadImage(file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = document.getElementById('imagePreview');
-                img.src = e.target.result;
-                img.style.display = 'block';
+        // Esperar a que la biblioteca ZXing esté cargada
+        document.addEventListener('DOMContentLoaded', () => {
+            const { BrowserMultiFormatReader, DecodeHintType, NotFoundException } = ZXing;
+            const codeReader = new BrowserMultiFormatReader();
+            let selectedDeviceId;
+            let videoElement = document.getElementById('video');
+            let resultElement = document.getElementById('result');
+            let errorElement = document.getElementById('error');
+            let startButton = document.getElementById('start-button');
+            let stopButton = document.getElementById('stop-button');
+            let copyButton = document.getElementById('copy-button');
+            let formatSelect = document.getElementById('format-select');
+            
+            // Configurar el botón de inicio
+            startButton.addEventListener('click', () => {
+                errorElement.textContent = '';
+                resultElement.textContent = 'Escaneando...';
                 
-                // Mostrar indicador de carga
-                document.getElementById('loadingIndicator').style.display = 'block';
+                const format = formatSelect.value;
+                const hints = new Map();
+                if (format !== 'ALL') {
+                    hints.set(DecodeHintType.POSSIBLE_FORMATS, [format]);
+                }
                 
-                // Procesar la imagen
-                processImage(e.target.result);
-            };
-            reader.readAsDataURL(file);
-        }
-        
-        // Función para procesar la imagen
-        async function processImage(imageSrc) {
-            try {
-                // Crear una imagen para trabajar con ella
-                const img = new Image();
-                img.src = imageSrc;
-                
-                img.onload = async function() {
-                    // Crear un canvas para manipular la imagen
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    ctx.drawImage(img, 0, 0);
-                    
-                    // Guardar los datos de la imagen
-                    imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    
-                    // Procesar OCR general
-                    await processOCR(canvas);
-                    
-                    // Procesar MRZ
-                    await processMRZ(canvas);
-                    
-                    // Procesar PDF417
-                    await processPDF417(imageData);
-                    
-                    // Ocultar indicador de carga
-                    document.getElementById('loadingIndicator').style.display = 'none';
-                };
-            } catch (error) {
-                console.error("Error al procesar la imagen:", error);
-                document.getElementById('loadingIndicator').style.display = 'none';
-            }
-        }
-        
-        // Función para procesar OCR general
-        async function processOCR(canvas) {
-            try {
-                const result = await Tesseract.recognize(
-                    canvas,
-                    'spa+eng',
-                    {
-                        logger: m => console.log(m),
-                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789< '
-                    }
-                );
-                
-                document.getElementById('ocrTextResult').innerHTML = `
-                    <p><strong>Texto reconocido:</strong></p>
-                    <pre>${result.data.text}</pre>
-                    <p><strong>Confianza media:</strong> ${result.data.confidence.toFixed(2)}%</p>
-                `;
-            } catch (error) {
-                console.error("Error en OCR:", error);
-                document.getElementById('ocrTextResult').innerHTML = `
-                    <p>Error al procesar el OCR: ${error.message}</p>
-                `;
-            }
-        }
-        
-        // Función para procesar MRZ
-        async function processMRZ(canvas) {
-            try {
-                // Primero intentamos encontrar el MRZ en la parte inferior de la imagen
-                const mrzHeight = 100; // Altura típica del área MRZ
-                const mrzCanvas = document.createElement('canvas');
-                const mrzCtx = mrzCanvas.getContext('2d');
-                mrzCanvas.width = canvas.width;
-                mrzCanvas.height = mrzHeight;
-                
-                // Copiar la parte inferior de la imagen
-                mrzCtx.drawImage(
-                    canvas,
-                    0, canvas.height - mrzHeight, // Coordenadas de origen
-                    canvas.width, mrzHeight,      // Dimensiones de origen
-                    0, 0,                        // Coordenadas de destino
-                    canvas.width, mrzHeight       // Dimensiones de destino
-                );
-                
-                // Procesar OCR específico para MRZ
-                const result = await Tesseract.recognize(
-                    mrzCanvas,
-                    'mrz',
-                    {
-                        logger: m => console.log(m),
-                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789< '
-                    }
-                );
-                
-                // Parsear el MRZ (esto es básico, se puede mejorar)
-                const mrzText = result.data.text;
-                const mrzLines = mrzText.split('\n').filter(line => line.trim().length > 0);
-                
-                let mrzHtml = `<p><strong>MRZ reconocido:</strong></p><pre>${mrzText}</pre>`;
-                
-                if (mrzLines.length >= 2) {
-                    mrzHtml += `<p><strong>Línea 1:</strong> ${mrzLines[0]}</p>`;
-                    mrzHtml += `<p><strong>Línea 2:</strong> ${mrzLines[1]}</p>`;
-                    
-                    if (mrzLines.length > 2) {
-                        mrzHtml += `<p><strong>Línea 3:</strong> ${mrzLines[2]}</p>`;
-                    }
-                    
-                    // Intento básico de extraer datos del MRZ (para pasaporte tipo TD1)
-                    if (mrzLines[0].startsWith('P') && mrzLines[0].length > 1) {
-                        const docType = mrzLines[0].substring(0, 2);
-                        const issuingCountry = mrzLines[0].substring(2, 5);
-                        const lastName = mrzLines[0].substring(5).split('<<')[0].replace(/</g, ' ');
-                        const firstName = mrzLines[0].split('<<')[1] ? mrzLines[0].split('<<')[1].replace(/</g, ' ') : '';
+                codeReader.decodeFromVideoDevice(selectedDeviceId, videoElement, (result, err) => {
+                    if (result) {
+                        resultElement.textContent = result.text;
+                        stopButton.classList.remove('hidden');
+                        copyButton.classList.remove('hidden');
                         
-                        mrzHtml += `<h4>Datos extraídos:</h4>`;
-                        mrzHtml += `<p><strong>Tipo de documento:</strong> ${docType}</p>`;
-                        mrzHtml += `<p><strong>País emisor:</strong> ${issuingCountry}</p>`;
-                        mrzHtml += `<p><strong>Apellido:</strong> ${lastName}</p>`;
-                        mrzHtml += `<p><strong>Nombre:</strong> ${firstName}</p>`;
-                    }
-                }
-                
-                document.getElementById('mrzTextResult').innerHTML = mrzHtml;
-            } catch (error) {
-                console.error("Error en MRZ:", error);
-                document.getElementById('mrzTextResult').innerHTML = `
-                    <p>Error al procesar el MRZ: ${error.message}</p>
-                    <p>Intenta recortar manualmente la zona MRZ (parte inferior del documento) y subir solo esa parte.</p>
-                `;
-            }
-        }
-        
-        // Función para procesar PDF417
-        async function processPDF417(imageData) {
-            try {
-                // Usar jsQR para detectar códigos (aunque está diseñado para QR, puede ayudar)
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
-                
-                if (code) {
-                    document.getElementById('pdf417TextResult').innerHTML = `
-                        <p><strong>Código detectado:</strong></p>
-                        <pre>${code.data}</pre>
-                        <p><strong>Tipo:</strong> ${code.type}</p>
-                    `;
-                } else {
-                    // Si no se detecta con jsQR, intentar con pdf417.js
-                    try {
-                        const decoded = pdf417.decode(imageData);
-                        if (decoded && decoded.length > 0) {
-                            let pdf417Html = `<p><strong>Datos PDF417:</strong></p>`;
-                            decoded.forEach((item, index) => {
-                                pdf417Html += `<p><strong>Bloque ${index + 1}:</strong> ${item}</p>`;
-                            });
-                            document.getElementById('pdf417TextResult').innerHTML = pdf417Html;
-                        } else {
-                            document.getElementById('pdf417TextResult').innerHTML = `
-                                <p>No se detectó ningún código PDF417.</p>
-                                <p>Intenta tomar una foto más clara del código de barras.</p>
-                            `;
+                        // Intentar parsear datos estructurados (especialmente para PDF417)
+                        try {
+                            const parsedData = parsePDF417Data(result.text);
+                            if (parsedData) {
+                                resultElement.textContent = parsedData;
+                            }
+                        } catch (e) {
+                            console.log("No se pudo parsear como datos estructurados");
                         }
-                    } catch (e) {
-                        document.getElementById('pdf417TextResult').innerHTML = `
-                            <p>No se detectó ningún código PDF417.</p>
-                            <p>Error: ${e.message}</p>
-                        `;
                     }
+                    
+                    if (err && !(err instanceof NotFoundException)) {
+                        errorElement.textContent = err.message;
+                        console.error(err);
+                    }
+                }, hints);
+                
+                startButton.classList.add('hidden');
+                stopButton.classList.remove('hidden');
+            });
+            
+            // Configurar el botón de detener
+            stopButton.addEventListener('click', () => {
+                codeReader.reset();
+                startButton.classList.remove('hidden');
+                stopButton.classList.add('hidden');
+                resultElement.textContent = 'Escaneo detenido. Presione "Iniciar Escaneo" para continuar.';
+            });
+            
+            // Configurar el botón de copiar
+            copyButton.addEventListener('click', () => {
+                navigator.clipboard.writeText(resultElement.textContent)
+                    .then(() => {
+                        const originalText = copyButton.textContent;
+                        copyButton.textContent = '¡Copiado!';
+                        setTimeout(() => {
+                            copyButton.textContent = originalText;
+                        }, 2000);
+                    })
+                    .catch(err => {
+                        errorElement.textContent = 'Error al copiar: ' + err.message;
+                    });
+            });
+            
+            // Función para parsear datos PDF417 estructurados
+            function parsePDF417Data(data) {
+                // Ejemplo para documentos de identidad (puede variar según el formato)
+                if (data.startsWith("@")) {
+                    const lines = data.split("\n");
+                    let parsed = "";
+                    for (const line of lines) {
+                        if (line.startsWith("ANSI ")) continue;
+                        if (line.startsWith("DL")) {
+                            // Licencia de conducir (ejemplo formato EEUU)
+                            const parts = line.split("DL");
+                            if (parts.length > 1) {
+                                parsed += "Licencia: " + parts[1].trim() + "\n";
+                            }
+                        } else if (line.includes("DCS") || line.includes("DAC") || line.includes("DCT")) {
+                            // Información personal
+                            parsed += line.replace(/^[A-Z]{2,3}/, "").trim() + "\n";
+                        }
+                    }
+                    return parsed || null;
                 }
-            } catch (error) {
-                console.error("Error en PDF417:", error);
-                document.getElementById('pdf417TextResult').innerHTML = `
-                    <p>Error al procesar el código PDF417: ${error.message}</p>
-                `;
-            }
-        }
-        
-        // Función para cambiar pestañas
-        function openTab(evt, tabName) {
-            const tabcontent = document.getElementsByClassName("tabcontent");
-            for (let i = 0; i < tabcontent.length; i++) {
-                tabcontent[i].style.display = "none";
+                return null;
             }
             
-            const tablinks = document.getElementsByClassName("tablinks");
-            for (let i = 0; i < tablinks.length; i++) {
-                tablinks[i].className = tablinks[i].className.replace(" active", "");
-            }
+            // Inicializar al cargar la página
+            codeReader.listVideoInputDevices()
+                .then(videoInputDevices => {
+                    if (videoInputDevices.length > 0) {
+                        selectedDeviceId = videoInputDevices[0].deviceId;
+                    }
+                })
+                .catch(err => {
+                    errorElement.textContent = 'Error al acceder a la cámara: ' + err.message;
+                });
             
-            document.getElementById(tabName).style.display = "block";
-            evt.currentTarget.className += " active";
-        }
+            // Limpiar al salir de la página
+            window.addEventListener('beforeunload', () => {
+                codeReader.reset();
+            });
+        });
     </script>
 </body>
 </html>
