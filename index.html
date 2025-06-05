@@ -3,294 +3,521 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototipo de Lector de Documentos</title>
-    <!-- Incluye Tesseract.js desde un CDN -->
-    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5.0.0/dist/tesseract.min.js'></script>
+    <title>Lector de Documentos de Identidad</title>
     <style>
-        /* Estilos CSS integrados */
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            min-height: 100vh;
-            background-color: #eef2f7;
-            margin: 0;
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
             padding: 20px;
-            box-sizing: border-box;
+            background-color: #f5f5f5;
         }
-
-        .container {
-            background-color: #ffffff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        h1 {
+            color: #333;
             text-align: center;
-            max-width: 700px;
-            width: 100%;
-            margin-top: 20px;
         }
-
-        h1, h2 {
-            color: #2c3e50;
-            margin-bottom: 20px;
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
-
-        .camera-section video {
-            width: 100%;
-            max-width: 640px;
-            height: auto;
-            border: 3px solid #3498db;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            background-color: #000;
-        }
-
-        button {
-            background-color: #3498db;
-            color: white;
-            padding: 12px 25px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 17px;
-            margin: 8px;
-            transition: background-color 0.3s ease;
-        }
-
-        button:hover {
-            background-color: #2980b9;
-        }
-
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-
-        .results-section {
-            margin-top: 30px;
-            border-top: 1px solid #eee;
-            padding-top: 20px;
-        }
-
-        .results-section pre {
-            background-color: #ecf0f1;
+        .camera-section {
+            background-color: white;
             padding: 20px;
             border-radius: 8px;
-            text-align: left;
-            white-space: pre-wrap;
-            word-break: break-word;
-            max-height: 350px;
-            overflow-y: auto;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .results-section {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #camera {
+            width: 100%;
+            height: auto;
+            background-color: #eee;
+            border-radius: 4px;
+        }
+        #canvas {
+            display: none;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .selectors {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        select {
+            padding: 8px;
+            border-radius: 4px;
             border: 1px solid #ddd;
-            font-size: 14px;
-            line-height: 1.6;
-            color: #34495e;
         }
-
-        .status-message {
-            margin-top: 15px;
-            font-style: italic;
-            color: #555;
-            font-size: 15px;
+        .data-field {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
         }
-
-        .error-message {
-            color: #e74c3c;
-            margin-top: 15px;
-            font-weight: bold;
-            font-size: 15px;
+        .data-field strong {
+            display: inline-block;
+            width: 150px;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+        .success {
+            color: green;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
+    <h1>Lector de Documentos de Identidad</h1>
+    
     <div class="container">
-        <h1>Prototipo Lector de Documentos</h1>
-
         <div class="camera-section">
-            <video id="video" autoplay playsinline></video>
-            <canvas id="canvas" style="display:none;"></canvas>
-            <button id="startButton">Abrir Cámara</button>
-            <button id="captureButton" style="display:none;">Capturar Foto</button>
-            <button id="resetButton" style="display:none;">Reiniciar</button>
+            <div class="selectors">
+                <select id="cameraSelect"></select>
+                <button id="startButton">Iniciar Cámara</button>
+                <button id="captureButton" disabled>Capturar Documento</button>
+            </div>
+            <video id="camera" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div id="cameraStatus" class="error">Cámara no iniciada</div>
         </div>
-
+        
         <div class="results-section">
-            <h2>Datos Extraídos (OCR General)</h2>
-            <pre id="extractedData"></pre>
+            <h2>Datos Extraídos</h2>
+            <div class="data-field">
+                <strong>Tipo de Documento:</strong> <span id="docType">-</span>
+            </div>
+            <div class="data-field">
+                <strong>Número:</strong> <span id="docNumber">-</span>
+            </div>
+            <div class="data-field">
+                <strong>Apellidos:</strong> <span id="lastName">-</span>
+            </div>
+            <div class="data-field">
+                <strong>Nombres:</strong> <span id="firstName">-</span>
+            </div>
+            <div class="data-field">
+                <strong>Nacionalidad:</strong> <span id="nationality">-</span>
+            </div>
+            <div class="data-field">
+                <strong>Fecha de Nacimiento:</strong> <span id="birthDate">-</span>
+            </div>
+            <div class="data-field">
+                <strong>Sexo:</strong> <span id="gender">-</span>
+            </div>
+            <div class="data-field">
+                <strong>Fecha de Expedición:</strong> <span id="issueDate">-</span>
+            </div>
+            <div class="data-field">
+                <strong>Fecha de Vencimiento:</strong> <span id="expiryDate">-</span>
+            </div>
+            <div id="resultStatus"></div>
         </div>
-
-        <div id="statusMessage" class="status-message"></div>
-        <div id="errorMessage" class="error-message"></div>
     </div>
 
+    <!-- Bibliotecas para procesamiento de imágenes y OCR -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf417@0.8.0/dist/pdf417.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
     <script>
-        // Lógica JavaScript integrada
-        const video = document.getElementById('video');
+        // Variables globales
+        let stream = null;
+        let selectedDeviceId = null;
+        const video = document.getElementById('camera');
         const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const cameraSelect = document.getElementById('cameraSelect');
         const startButton = document.getElementById('startButton');
         const captureButton = document.getElementById('captureButton');
-        const resetButton = document.getElementById('resetButton');
-        const extractedDataPre = document.getElementById('extractedData');
-        const statusMessageDiv = document.getElementById('statusMessage');
-        const errorMessageDiv = document.getElementById('errorMessage');
-        const context = canvas.getContext('2d');
+        const cameraStatus = document.getElementById('cameraStatus');
+        const resultStatus = document.getElementById('resultStatus');
 
-        let stream; // Para almacenar el MediaStream de la cámara
-        let TesseractWorker; // Variable para el worker de Tesseract.js
+        // Evento al cargar la página
+        window.addEventListener('DOMContentLoaded', () => {
+            enumerateCameras();
+        });
 
-        // --- Funciones de Utilidad para Mensajes ---
-
-        function showMessage(element, message, type = 'info') {
-            element.textContent = message;
-            element.style.display = 'block';
-            if (type === 'error') {
-                element.style.color = '#e74c3c'; // Rojo
-            } else {
-                element.style.color = '#555'; // Gris para info/status
+        // Enumerar cámaras disponibles
+        async function enumerateCameras() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                
+                if (videoDevices.length === 0) {
+                    cameraStatus.textContent = "No se encontraron cámaras";
+                    return;
+                }
+                
+                videoDevices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `Cámara ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+                
+                selectedDeviceId = videoDevices[0].deviceId;
+            } catch (err) {
+                cameraStatus.textContent = `Error al acceder a las cámaras: ${err.message}`;
+                cameraStatus.className = 'error';
             }
         }
 
-        function hideMessage(element) {
-            element.style.display = 'none';
-            element.textContent = ''; // Limpiar el contenido al ocultar
-        }
+        // Cambiar cámara seleccionada
+        cameraSelect.addEventListener('change', () => {
+            selectedDeviceId = cameraSelect.value;
+        });
 
-        function clearResults() {
-            extractedDataPre.textContent = 'Aún no se ha extraído ningún dato.';
-            hideMessage(errorMessageDiv);
-            hideMessage(statusMessageDiv);
-        }
-
-        // --- Acceso a la Cámara ---
-
+        // Iniciar cámara
         startButton.addEventListener('click', async () => {
-            clearResults();
             try {
-                // Pedir acceso a la cámara trasera (si está disponible)
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' }
-                });
-                video.srcObject = stream;
-                video.style.display = 'block';
-                startButton.style.display = 'none';
-                captureButton.style.display = 'inline-block';
-                resetButton.style.display = 'none'; // Ocultar reset hasta que haya una captura
-                video.play();
-                showMessage(statusMessageDiv, 'Cámara iniciada. Enfoca el documento y captura la foto.');
-
-                // Precargar el worker de Tesseract para un inicio más rápido (opcional)
-                if (!TesseractWorker) {
-                    showMessage(statusMessageDiv, 'Cargando módulo OCR... esto puede tardar unos segundos.', 'info');
-                    TesseractWorker = await Tesseract.createWorker('spa', 1, { // Usamos 'spa' para español
-                        logger: m => {
-                            if (m.status === 'recognizing text') {
-                                showMessage(statusMessageDiv, `Reconociendo texto: ${Math.round(m.progress * 100)}%`, 'info');
-                            } else if (m.status) {
-                                showMessage(statusMessageDiv, `Estado OCR: ${m.status}`, 'info');
-                            }
-                        }
-                    });
-                    showMessage(statusMessageDiv, 'Módulo OCR cargado.', 'info');
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
                 }
-
+                
+                const constraints = {
+                    video: {
+                        deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'environment'
+                    }
+                };
+                
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                captureButton.disabled = false;
+                cameraStatus.textContent = "Cámara iniciada correctamente";
+                cameraStatus.className = 'success';
             } catch (err) {
-                console.error("Error al acceder a la cámara: ", err);
-                showMessage(errorMessageDiv, `No se pudo acceder a la cámara. Asegúrate de que el navegador tenga permiso y no esté en uso. Error: ${err.name}`, 'error');
-                startButton.style.display = 'inline-block';
-                captureButton.style.display = 'none';
-                resetButton.style.display = 'none';
+                cameraStatus.textContent = `Error al iniciar la cámara: ${err.message}`;
+                cameraStatus.className = 'error';
             }
         });
 
-        // --- Captura de Foto y Procesamiento ---
-
+        // Capturar imagen y procesar
         captureButton.addEventListener('click', async () => {
-            if (!stream || video.readyState !== video.HAVE_ENOUGH_DATA) {
-                showMessage(errorMessageDiv, 'La cámara no está activa o el video no está listo.', 'error');
-                return;
-            }
-
-            hideMessage(errorMessageDiv);
-            extractedDataPre.textContent = ''; // Limpiar resultados anteriores
-            showMessage(statusMessageDiv, 'Capturando imagen y procesando...');
-
-            // Detener el stream de la cámara para liberar recursos
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                video.srcObject = null;
-            }
-            video.style.display = 'none'; // Ocultar el video
-            captureButton.style.display = 'none'; // Ocultar botón de captura
-            startButton.style.display = 'none'; // Ocultar botón de inicio
-            resetButton.style.display = 'inline-block'; // Mostrar botón de reiniciar
-
-            // Dibujar el frame del video en el canvas
+            if (!stream) return;
+            
+            // Ajustar canvas al tamaño del video
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            canvas.style.display = 'block'; // Mostrar el canvas con la imagen capturada
-
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            resultStatus.textContent = "Procesando documento...";
+            resultStatus.className = '';
+            
             try {
-                if (!TesseractWorker) {
-                    // Esto no debería ocurrir si se precarga, pero es una salvaguarda
-                    showMessage(statusMessageDiv, 'Cargando módulo OCR... esto puede tardar unos segundos.', 'info');
-                    TesseractWorker = await Tesseract.createWorker('spa', 1, {
-                        logger: m => {
-                            if (m.status === 'recognizing text') {
-                                showMessage(statusMessageDiv, `Reconociendo texto: ${Math.round(m.progress * 100)}%`, 'info');
-                            } else if (m.status) {
-                                showMessage(statusMessageDiv, `Estado OCR: ${m.status}`, 'info');
-                            }
+                // Extraer datos del documento
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                
+                // 1. Intentar leer código PDF417 (IDE302)
+                const pdf417Result = await scanPDF417(imageData);
+                if (pdf417Result) {
+                    displayPDF417Data(pdf417Result);
+                    resultStatus.textContent = "Datos extraídos correctamente (PDF417)";
+                    resultStatus.className = 'success';
+                    return;
+                }
+                
+                // 2. Intentar leer MRZ (Zona legible por máquina)
+                const mrzResult = await scanMRZ(imageData);
+                if (mrzResult) {
+                    displayMRZData(mrzResult);
+                    resultStatus.textContent = "Datos extraídos correctamente (MRZ)";
+                    resultStatus.className = 'success';
+                    return;
+                }
+                
+                // 3. Intentar OCR en áreas específicas (OCR-B)
+                const ocrResult = await performOCR(imageData);
+                if (ocrResult) {
+                    displayOCRData(ocrResult);
+                    resultStatus.textContent = "Datos extraídos correctamente (OCR)";
+                    resultStatus.className = 'success';
+                    return;
+                }
+                
+                resultStatus.textContent = "No se pudo leer ningún dato del documento";
+                resultStatus.className = 'error';
+            } catch (err) {
+                resultStatus.textContent = `Error al procesar documento: ${err.message}`;
+                resultStatus.className = 'error';
+                console.error(err);
+            }
+        });
+
+        // Función para escanear código PDF417
+        async function scanPDF417(imageData) {
+            try {
+                // Usamos jsQR que también puede leer algunos códigos PDF417
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                if (!code) return null;
+                
+                // Parsear datos específicos de IDE302
+                if (code.data.startsWith("@")) {
+                    return parseIDE302(code.data);
+                }
+                
+                return null;
+            } catch (err) {
+                console.error("Error al leer PDF417:", err);
+                return null;
+            }
+        }
+
+        // Parsear formato IDE302 (PDF417)
+        function parseIDE302(data) {
+            const lines = data.split('\n');
+            if (lines.length < 3) return null;
+            
+            // Ejemplo de estructura IDE302:
+            // @
+            // ANI<<ALVARO<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            // 12345678A5ESP7601011M1801015<<<<<<<<2
+            
+            const result = {};
+            
+            // Línea 2: Apellidos y nombres
+            const nameLine = lines[1];
+            const nameParts = nameLine.split('<<');
+            result.lastName = nameParts[0].substring(5); // Quitar los primeros 5 caracteres (ej. "ANI<<")
+            result.firstName = nameParts[1].replace(/</g, '').trim();
+            
+            // Línea 3: Datos personales
+            const dataLine = lines[2];
+            result.docNumber = dataLine.substring(0, 9).replace(/</g, '');
+            result.nationality = dataLine.substring(10, 13);
+            
+            // Fecha de nacimiento (YYMMDD)
+            const birthDateStr = dataLine.substring(13, 19);
+            result.birthDate = `19${birthDateStr.substring(0, 2)}-${birthDateStr.substring(2, 4)}-${birthDateStr.substring(4, 6)}`;
+            
+            result.gender = dataLine.substring(20, 21);
+            
+            // Fecha de vencimiento (YYMMDD)
+            const expiryDateStr = dataLine.substring(21, 27);
+            result.expiryDate = `20${expiryDateStr.substring(0, 2)}-${expiryDateStr.substring(2, 4)}-${expiryDateStr.substring(4, 6)}`;
+            
+            result.docType = "Documento Nacional de Identidad";
+            
+            return result;
+        }
+
+        // Función para escanear MRZ
+        async function scanMRZ(imageData) {
+            try {
+                // Usar Tesseract.js para OCR en la zona MRZ
+                const { data: { text } } = await Tesseract.recognize(
+                    imageData,
+                    'eng',
+                    { 
+                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', 
+                        preserve_interword_spaces: true 
+                    }
+                );
+                
+                if (!text) return null;
+                
+                // Buscar líneas MRZ (generalmente 2 o 3 líneas con caracteres especiales)
+                const lines = text.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 20 && (line.includes('<') || /[0-9]/.test(line)));
+                
+                if (lines.length < 2) return null;
+                
+                return parseMRZ(lines);
+            } catch (err) {
+                console.error("Error al leer MRZ:", err);
+                return null;
+            }
+        }
+
+        // Parsear MRZ (para pasaportes y documentos de identidad)
+        function parseMRZ(lines) {
+            const result = {};
+            
+            // Determinar tipo de documento por la primera línea
+            if (lines[0].startsWith('P<')) {
+                result.docType = "Pasaporte";
+                return parsePassportMRZ(lines, result);
+            } else {
+                result.docType = "Documento de Identidad";
+                return parseIDCardMRZ(lines, result);
+            }
+        }
+
+        // Parsear MRZ de pasaporte
+        function parsePassportMRZ(lines, result) {
+            // Primera línea
+            const line1 = lines[0];
+            const country = line1.substring(2, 5);
+            
+            // Segunda línea
+            const line2 = lines[1];
+            result.docNumber = line2.substring(0, 9).replace(/</g, '');
+            result.nationality = country;
+            
+            // Fecha de nacimiento (YYMMDD)
+            const birthDateStr = line2.substring(13, 19);
+            result.birthDate = `19${birthDateStr.substring(0, 2)}-${birthDateStr.substring(2, 4)}-${birthDateStr.substring(4, 6)}`;
+            
+            result.gender = line2.substring(20, 21);
+            
+            // Fecha de vencimiento (YYMMDD)
+            const expiryDateStr = line2.substring(21, 27);
+            result.expiryDate = `20${expiryDateStr.substring(0, 2)}-${expiryDateStr.substring(2, 4)}-${expiryDateStr.substring(4, 6)}`;
+            
+            // Nombre (puede estar en la primera línea)
+            const nameParts = line1.split('<<');
+            result.lastName = nameParts[0].substring(5).replace(/</g, '');
+            result.firstName = nameParts[1] ? nameParts[1].replace(/</g, ' ') : '';
+            
+            return result;
+        }
+
+        // Parsear MRZ de documento de identidad
+        function parseIDCardMRZ(lines, result) {
+            // Suponemos formato de 2 líneas
+            const line1 = lines[0];
+            const line2 = lines[1];
+            
+            result.docNumber = line1.substring(0, 9).replace(/</g, '');
+            
+            // Fecha de nacimiento (YYMMDD)
+            const birthDateStr = line1.substring(13, 19);
+            result.birthDate = `19${birthDateStr.substring(0, 2)}-${birthDateStr.substring(2, 4)}-${birthDateStr.substring(4, 6)}`;
+            
+            result.gender = line1.substring(20, 21);
+            
+            // Fecha de vencimiento (YYMMDD)
+            const expiryDateStr = line1.substring(21, 27);
+            result.expiryDate = `20${expiryDateStr.substring(0, 2)}-${expiryDateStr.substring(2, 4)}-${expiryDateStr.substring(4, 6)}`;
+            
+            // Nacionalidad
+            result.nationality = line1.substring(10, 13);
+            
+            // Nombre
+            const nameParts = line2.split('<<');
+            result.lastName = nameParts[0].replace(/</g, ' ');
+            result.firstName = nameParts[1] ? nameParts[1].replace(/</g, ' ') : '';
+            
+            return result;
+        }
+
+        // Función para realizar OCR en áreas específicas (OCR-B)
+        async function performOCR(imageData) {
+            try {
+                // Recortar áreas específicas para OCR (ajustar según necesidades)
+                const areas = {
+                    docNumber: { x: 0.2, y: 0.1, width: 0.3, height: 0.05 },
+                    lastName: { x: 0.2, y: 0.2, width: 0.6, height: 0.05 },
+                    firstName: { x: 0.2, y: 0.25, width: 0.6, height: 0.05 },
+                    birthDate: { x: 0.2, y: 0.35, width: 0.2, height: 0.05 },
+                    expiryDate: { x: 0.5, y: 0.35, width: 0.2, height: 0.05 }
+                };
+                
+                const result = { docType: "Documento de Identidad" };
+                
+                // Procesar cada área
+                for (const [field, area] of Object.entries(areas)) {
+                    const { x, y, width, height } = area;
+                    const cropped = cropImageData(imageData, x, y, width, height);
+                    
+                    const { data: { text } } = await Tesseract.recognize(
+                        cropped,
+                        'spa',
+                        { 
+                            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/- ', 
+                            preserve_interword_spaces: true 
                         }
-                    });
+                    );
+                    
+                    result[field] = text.trim();
                 }
+                
+                return result;
+            } catch (err) {
+                console.error("Error en OCR:", err);
+                return null;
+            }
+        }
 
-                // Realizar OCR en la imagen del canvas
-                // PASAMOS DIRECTAMENTE EL ELEMENTO CANVAS AL RECONOCEDOR
-                const { data: { text } } = await TesseractWorker.recognize(canvas);
-
-                if (text && text.trim() !== '') {
-                    extractedDataPre.textContent = text;
-                    showMessage(statusMessageDiv, 'OCR completado.');
-                } else {
-                    extractedDataPre.textContent = 'No se detectó texto significativo.';
-                    showMessage(statusMessageDiv, 'OCR completado, pero no se detectó texto.', 'info');
+        // Función para recortar ImageData
+        function cropImageData(imageData, x, y, width, height) {
+            const cropX = Math.floor(x * imageData.width);
+            const cropY = Math.floor(y * imageData.height);
+            const cropWidth = Math.floor(width * imageData.width);
+            const cropHeight = Math.floor(height * imageData.height);
+            
+            const croppedData = new Uint8ClampedArray(cropWidth * cropHeight * 4);
+            
+            for (let i = 0; i < cropHeight; i++) {
+                for (let j = 0; j < cropWidth; j++) {
+                    const srcPos = ((cropY + i) * imageData.width + (cropX + j)) * 4;
+                    const dstPos = (i * cropWidth + j) * 4;
+                    
+                    croppedData[dstPos] = imageData.data[srcPos];
+                    croppedData[dstPos + 1] = imageData.data[srcPos + 1];
+                    croppedData[dstPos + 2] = imageData.data[srcPos + 2];
+                    croppedData[dstPos + 3] = imageData.data[srcPos + 3];
                 }
-
-            } catch (error) {
-                console.error("Error durante el procesamiento OCR:", error);
-                showMessage(errorMessageDiv, `Error al procesar la imagen con OCR: ${error.message || error}`, 'error');
-                extractedDataPre.textContent = 'Error al procesar la imagen.';
             }
-        });
+            
+            return new ImageData(croppedData, cropWidth, cropHeight);
+        }
 
-        // --- Botón de Reiniciar ---
-        resetButton.addEventListener('click', () => {
-            // Si hay un stream activo, detenerlo
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                video.srcObject = null;
-            }
-            video.style.display = 'none';
-            canvas.style.display = 'none';
-            startButton.style.display = 'inline-block';
-            captureButton.style.display = 'none';
-            resetButton.style.display = 'none';
-            clearResults();
-            showMessage(statusMessageDiv, 'Listo para iniciar la cámara de nuevo.');
-        });
+        // Mostrar datos de PDF417
+        function displayPDF417Data(data) {
+            document.getElementById('docType').textContent = data.docType || '-';
+            document.getElementById('docNumber').textContent = data.docNumber || '-';
+            document.getElementById('lastName').textContent = data.lastName || '-';
+            document.getElementById('firstName').textContent = data.firstName || '-';
+            document.getElementById('nationality').textContent = data.nationality || '-';
+            document.getElementById('birthDate').textContent = data.birthDate || '-';
+            document.getElementById('gender').textContent = data.gender || '-';
+            document.getElementById('expiryDate').textContent = data.expiryDate || '-';
+        }
 
+        // Mostrar datos de MRZ
+        function displayMRZData(data) {
+            document.getElementById('docType').textContent = data.docType || '-';
+            document.getElementById('docNumber').textContent = data.docNumber || '-';
+            document.getElementById('lastName').textContent = data.lastName || '-';
+            document.getElementById('firstName').textContent = data.firstName || '-';
+            document.getElementById('nationality').textContent = data.nationality || '-';
+            document.getElementById('birthDate').textContent = data.birthDate || '-';
+            document.getElementById('gender').textContent = data.gender || '-';
+            document.getElementById('expiryDate').textContent = data.expiryDate || '-';
+        }
 
-        // Inicializar la interfaz al cargar la página
-        document.addEventListener('DOMContentLoaded', () => {
-            video.style.display = 'none';
-            canvas.style.display = 'none';
-            captureButton.style.display = 'none';
-            resetButton.style.display = 'none';
-            clearResults();
-            showMessage(statusMessageDiv, 'Haz clic en "Abrir Cámara" para comenzar.');
-        });
+        // Mostrar datos de OCR
+        function displayOCRData(data) {
+            document.getElementById('docType').textContent = data.docType || '-';
+            document.getElementById('docNumber').textContent = data.docNumber || '-';
+            document.getElementById('lastName').textContent = data.lastName || '-';
+            document.getElementById('firstName').textContent = data.firstName || '-';
+            document.getElementById('birthDate').textContent = data.birthDate || '-';
+            document.getElementById('expiryDate').textContent = data.expiryDate || '-';
+        }
     </script>
 </body>
 </html>
